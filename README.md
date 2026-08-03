@@ -4,6 +4,8 @@ This repository contains the R scripts used to preprocess, quality-control, inte
 
 The scripts are numbered according to their intended execution order and the main figures they support. Unless stated otherwise, they read data from `Data/`, write processed objects to `Output/Objects/`, figures to `Output/Figures/`, and timestamped logs to `Output/Logs/`.
 
+The folder Data can be downloaded in the following link: https://nc.molgen.mpg.de/cloud/index.php/s/sfSRxTNMkLQF6dB
+
 ## Repository structure
 
 ```text
@@ -33,6 +35,7 @@ The scripts are numbered according to their intended execution order and the mai
 ```
 
 Preserve the original filenames and table structures shown below, or update the corresponding **User settings** section in each script.
+
 
 ## Analysis workflow
 
