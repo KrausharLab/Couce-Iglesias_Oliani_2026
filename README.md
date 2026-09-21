@@ -103,6 +103,8 @@ SILACtimecourse_precursors.csv
 SILACtimecourse_samples_metadata.xlsx
 Controls_light.csv
 Controls_pulse.csv
+evidence_ArgProConversion.txt
+evidence_labellingEfficiency.txt
 ```
 
 Required inputs in `Data/SILAC_Titration_MS/`:
@@ -361,9 +363,8 @@ Main operations:
 - filters proteins and cells by detection coverage;
 - calculates NA-aware cell distances with `proDA::dist_approx`;
 - performs multidimensional scaling, graph clustering, and UMAP;
-- displays median total, M/L, and M/H values on the total-proteome UMAP;
-- plots selected protein markers;
-- compares total abundance with M/L and M/H values and residual boundaries.
+- displays median total, M/L, and M/H values on the total-proteome UMAP for selected markers;
+- compares total abundance with M/L and M/H values and residual boundaries for selected markers.
 
 Required input in `Data/SILAC_SingleCellProteomics_MS/`:
 
@@ -433,7 +434,7 @@ ComplexHeatmap, circlize, corrplot, ggcorrplot, sf, gridExtra
 Single-cell and file-format packages:
 
 ```text
-Seurat, harmony, Matrix, hdf5r, arrow
+Seurat, harmony, Matrix, hdf5r, arrow, tidyverse
 ```
 
 A typical installation pattern is:
@@ -493,7 +494,7 @@ Warnings, messages, uncaught errors, and tracebacks are written to the log. The 
 
 This repository contains the analysis code associated with the manuscript:
 
-**Couce-Iglesias M., Oliani E. et al. _Recording proteome synthesis and turnover in the embryo at hour-timescale, spatial, and single-cell resolution with MEMBRYO._ Manuscript in preparation.**
+**Couce-Iglesias M., Oliani E. et al. _Recording proteome dynamics in the late-stage embryo at hour-timescale, spatial, and single-cell resolution with MEMBRYO._ Manuscript in preparation.**
 
 The final citation and repository accession numbers will be added once available.
 
