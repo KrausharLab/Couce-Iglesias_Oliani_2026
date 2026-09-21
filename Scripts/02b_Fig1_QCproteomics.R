@@ -106,12 +106,13 @@ suppressPackageStartupMessages({
   library(stringr)
   library(tibble)
   library(tidyr)
+  library(tidyverse)
   library(vegan)
   library(viridis)
+  library(openxlsx)
 })
 
 # ---- User settings ----
-path <- "Figures/Graphs_from_final_scripts/" 
 path <- "./Output/"
 dir.create(path, recursive = TRUE, showWarnings = FALSE)
 dir.create(paste0(path, "Objects/"), recursive = TRUE, showWarnings = FALSE)
@@ -233,6 +234,182 @@ print(p)
 dev.off()
 
 rm(data_wide, sum_counts, p)
+
+
+# ---- Extended figure 1e ----
+# Arginine to proline conversion
+arg_pro <- read_tsv("/project/KrausharLab/Cortex_team/Marta/Paper/Scripts/Github_structure/Data/SILAC_Timecourse_Bulk_MS/evidence_ArgProConversion.txt") %>%
+  select(Sequence, Pro6, Type, `Raw file`, `Intensity H`, Reverse,
+         `Potential contaminant`)
+
+ev <- arg_pro %>%
+  filter(is.na(Reverse), is.na(`Potential contaminant`)) %>%
+  mutate(
+    nP = str_count(Sequence, "P"),
+    run = as.integer(str_extract(`Raw file`, "\\d+$")),
+    intensity = replace_na(as.numeric(`Intensity H`), 0),
+    Pro6 = replace_na(as.integer(Pro6), 0))
+  # ) %>%
+  # filter(run == 6) #run 6
+
+n_identified_pro <- n_distinct(ev$Sequence)
+
+# Remove isotope-envelope coincidences
+ev <- ev %>%
+  filter(!(Pro6 > 0 & str_starts(Type, "MULTI"))) %>%
+  mutate(form = if_else(Pro6 == 0, "I_unconverted", "I_converted"))
+
+peptides <- ev %>%
+  filter(intensity > 0) %>%
+  group_by(Sequence, nP, form, run) %>%
+  summarise(intensity = sum(intensity), .groups = "drop") %>%
+  pivot_wider(names_from = form, values_from = intensity, values_fill = 0)
+
+# Add missing columns if necessary
+if (!"I_unconverted" %in% names(peptides)) peptides$I_unconverted <- 0
+if (!"I_converted" %in% names(peptides)) peptides$I_converted <- 0
+
+observable_pro <- peptides %>%
+  filter(nP > 0, I_unconverted > 0)
+
+observed_pro <- observable_pro %>%
+  filter(I_converted > 0) %>%
+  mutate(
+    r = I_converted / I_unconverted,
+    C = 100 * r / (nP + r)
+  )
+
+n_observable_pro <- nrow(observable_pro)
+n_observed_pro <- nrow(observed_pro)
+
+cat("identified", n_identified_pro,
+    ", observable", n_observable_pro,
+    ", observed", n_observed_pro, "\n")
+cat(sprintf("median C = %.2f%%  IQR %.2f-%.2f%%\n",
+            median(observed_pro$C),
+            quantile(observed_pro$C, 0.25),
+            quantile(observed_pro$C, 0.75)))
+
+# Add metadata
+metadata <- read.xlsx("/project/KrausharLab/Cortex_team/Marta/Paper/Scripts/Github_structure/Data/SILAC_Timecourse_Bulk_MS/SILACtimecourse_samples_metadata.xlsx", sheet = 1)
+observed_pro <- merge(observed_pro, metadata[, c("Sample.ID", "Embryonic.Age", "Replicates", "Incubation.Time")], by.x = "run", by.y = "Sample.ID")
+
+# Plot Arg -> Pro
+med <- median(C)
+
+p <- ggplot(observed_pro, aes(x = C, col = Embryonic.Age, fill = Embryonic.Age)) +
+  geom_density(alpha = 0.7) +
+  labs(x = "Arg→Pro conversion (% per proline)", y = "Count") +
+  theme_minimal(base_size = 8) +
+  facet_grid(~Incubation.Time) +
+  scale_color_manual(values = c("E12.5"="#00aeef", "E13.5"="#007169", "E14.5"="#2bb573", "E15.5"="#f6931d", "E16.5"="#eb008b")) +
+  scale_fill_manual(values = c("E12.5" = "#00aeef","E13.5" = "#007169","E14.5" = "#2bb573","E15.5" = "#f6931d","E16.5" = "#eb008b")) + 
+  # geom_vline(xintercept = med, linewidth = 0.4) +
+  # annotate("text", x = med / 1.13, y = max(d_df$y) * 1.27,
+  #          label = sprintf("median %.1f%%", med), hjust = 1, size = 2.6) +
+    annotate("text", x = 15, y = 2,
+           label = sprintf("%s peptides identified\n%s observable\n%s observed",
+                           n_identified_lab, n_observable_lab, n_observed_lab),
+           hjust = 1, vjust = 1, size = 4, color = "#6b6b6b") +
+  xlim(0, 20) 
+
+pdf(paste(path,paste("Figures/ExtFig1e_ArgToPro_conversion.pdf", sep = ""), sep = ""), width=10)
+print(p)
+dev.off()
+
+
+# ---- Extended figure 1f ----
+# Labeling efficiency estimation
+lab_efficiency <- read_tsv("/project/KrausharLab/Cortex_team/Marta/Paper/Scripts/Github_structure/Data/SILAC_Timecourse_Bulk_MS/evidence_labellingEfficiency.txt") %>%
+  select(Sequence, Arg10norm, Lys8norm, `Raw file`, Intensity, Reverse,
+         `Potential contaminant`)
+
+vm <- lab_efficiency %>%
+  filter(is.na(Reverse), is.na(`Potential contaminant`)) %>%
+  mutate(
+    S = str_count(Sequence, "K") + str_count(Sequence, "R"),
+    n_heavy = replace_na(as.integer(Arg10norm), 0) +
+              replace_na(as.integer(Lys8norm), 0),
+    intensity = replace_na(as.numeric(Intensity), 0),
+    run = as.integer(str_extract(`Raw file`, "\\d+$"))
+  ) 
+  # filter(run == RUN)
+
+n_identified_lab <- n_distinct(vm$Sequence)
+vm <- vm %>% filter(intensity > 0)
+
+per_peptide <- list()
+n_observable_lab <- 0
+n_observed_lab <- 0
+
+for (S in sort(unique(vm$S[vm$S >= 2]))) {
+
+  peptides <- vm %>%
+    filter(.data$S == S) %>%
+    group_by(Sequence, n_heavy, run) %>%
+    summarise(intensity = sum(intensity), .groups = "drop") %>%
+    pivot_wider(names_from = n_heavy, values_from = intensity, values_fill = 0)
+
+  all_heavy <- as.character(S)
+  one_light <- as.character(S - 1)
+
+  if (!all_heavy %in% names(peptides)) next
+
+  observable_lab <- peptides %>%
+    filter(.data[[all_heavy]] > 0)
+
+  n_observable_lab <- n_observable_lab + nrow(observable_lab)
+
+  if (!one_light %in% names(peptides)) next
+
+  observed_lab <- observable_lab %>%
+    filter(.data[[one_light]] > 0)
+
+  n_observed_lab <- n_observed_lab + nrow(observed_lab)
+
+  r <- observed_lab[[one_light]] / observed_lab[[all_heavy]]
+   per_peptide[[as.character(S)]] <- observed_lab %>%
+    transmute(
+      Sequence,
+      run,
+      labelling_efficiency = 100 * S / (S + r)
+    )
+}
+
+a <- bind_rows(per_peptide, .id = "S")
+
+cat("identified", n_identified_lab,
+    ", observable", n_observable_lab,
+    ", observed", n_observed_lab, "\n")
+cat(sprintf("median a = %.2f%%  IQR %.2f-%.2f%%\n",
+            median(a$labelling_efficiency), quantile(a$labelling_efficiency, 0.25), quantile(a$labelling_efficiency, 0.75)))
+
+# Add metadata
+metadata <- read.xlsx("/project/KrausharLab/Cortex_team/Marta/Paper/Scripts/Github_structure/Data/SILAC_Timecourse_Bulk_MS/SILACtimecourse_samples_metadata.xlsx", sheet = 1)
+a <- merge(a, metadata[, c("Sample.ID", "Embryonic.Age", "Replicates", "Incubation.Time")], by.x = "run", by.y = "Sample.ID")
+
+# Plot labelling efficiency
+med <- median(a$labelling_efficiency)
+
+p <- ggplot(a, aes(x = labelling_efficiency, col = Embryonic.Age, fill = Embryonic.Age)) +
+  geom_density(alpha = 0.7) +
+  labs(x = "Labelling efficiency (%)", y = "Count") +
+  theme_minimal(base_size = 8) +
+  scale_color_manual(values = c("E12.5"="#00aeef", "E13.5"="#007169", "E14.5"="#2bb573", "E15.5"="#f6931d", "E16.5"="#eb008b")) +
+  scale_fill_manual(values = c("E12.5" = "#00aeef","E13.5" = "#007169","E14.5" = "#2bb573","E15.5" = "#f6931d","E16.5" = "#eb008b")) + 
+  facet_grid(~Incubation.Time) +
+  # geom_vline(xintercept = med, linewidth = 0.4) +
+  # annotate("text", x = med / 1.13, y = max(d_df$y) * 1.27,
+  #          label = sprintf("median %.1f%%", med), hjust = 1, size = 2.6) +
+  annotate("text", x = 60, y = 0.12,
+           label = sprintf("%s peptides identified\n%s observable\n%s observed",
+                           n_identified_lab, n_observable_lab, n_observed_lab),
+           hjust = 1, vjust = 1, size = 4, color = "#6b6b6b") +
+  xlim(0, 100) 
+
+pdf(paste(path,paste("Figures/ExtFig1f_Labelling_efficiency.pdf", sep = ""), sep = ""), width=10)
+print(p)
+dev.off()
 
 
 # ---- Figure 2b ----
