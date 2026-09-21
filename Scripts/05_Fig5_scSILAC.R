@@ -131,7 +131,7 @@ marker_log2fc_threshold <- 0.6
 marker_adj_p_threshold <- 0.05
 
 # Proteins displayed on UMAPs
-selected_markers <- c("Ncam1", "Plch1", "Eif3g", "Rpl18a")
+selected_markers <- c("Ncam1", "Plch1", "Eif3g", "Cdk4")
 
 set.seed(123)
 
@@ -304,7 +304,7 @@ plot_selected_proteins <- function(object, values, cluster_column, umap_name, as
 
 
 # ---- Load and prepare the data ----
-raw_data <- read_parquet(file.path(data_path, "clean+TechNoiseSafety_unsafeRemoved_CSNorm.parquet"))
+raw_data <- read_parquet(file.path(data_path, "clean2+TechNoiseSafety_unsafeRemoved_CSNorm.parquet"))
 
 required_columns <- c(
   "Well",
@@ -354,10 +354,11 @@ assay_matrices <- lapply(assay_matrices, function(x) {
 
 message("Cells retained in every assay: ", length(common_cells))
 saveRDS(assay_matrices, file.path(path, "Objects/assay_matrices_all_assays.rds"))
+assay_matrices <- readRDS(file.path(path, "Objects/assay_matrices_all_assays.rds"))
 
 
 
-# ---- Figure 5a ----
+# ---- Figure 5b ----
 # Number of quantified proteins per retained cell and data type.
 counts_per_cell <- bind_rows(lapply(names(assay_matrices), function(assay_name) {
   tibble(
@@ -408,7 +409,7 @@ p <- ggplot(summary_counts, aes(assay, mean_n_proteins)) +
     y = "Detected proteins per cell"
   )
 
-ggsave(file.path(path, "Figures/Fig5a_ProteinCounts.pdf"), p, width = 6, height = 5)
+ggsave(file.path(path, "Figures/Fig5b_ProteinCounts.pdf"), p, width = 6, height = 5)
 
 
 # ---- Create the common Seurat container ----
@@ -431,8 +432,7 @@ base_object$Well <- colnames(base_object)
 
 
 
-# ---- Figures 5c ----
-# Clustering on total values
+# ---- Clustering on total values ----
 assay_name = "total"
 assay_label <- assay_config[[assay_name]]$label
 
@@ -493,111 +493,20 @@ assay_object <- RunUMAP(
   verbose = FALSE
 )
 
-
-# Display median total, M/L and M/H values per cell on the total-proteome UMAP.
-total_object <- assay_object
-
-total_values <- assay_matrices$total$values
-ML_values <- assay_matrices$turnover$values
-MH_values <- assay_matrices$medium$values
-
-cells <- Reduce(
-  intersect,
-  list(colnames(total_object), colnames(total_values), colnames(ML_values), colnames(MH_values))
-)
-if (length(cells) == 0) stop("No common cells were found between the Seurat object and the matrices.")
-
-total_object_subset <- subset(total_object, cells = cells)
-umap_coordinates <- Embeddings(total_object_subset, "umap_total")
-cells <- rownames(umap_coordinates)
-umap_coordinates <- umap_coordinates[cells, 1:2, drop = FALSE]
-
-median_total <- colMedians(as.matrix(total_values[, cells, drop = FALSE]), na.rm = TRUE)
-median_ML <- colMedians(as.matrix(ML_values[, cells, drop = FALSE]), na.rm = TRUE)
-median_MH <- colMedians(as.matrix(MH_values[, cells, drop = FALSE]), na.rm = TRUE)
-
-median_total[is.nan(median_total)] <- NA_real_
-median_ML[is.nan(median_ML)] <- NA_real_
-median_MH[is.nan(median_MH)] <- NA_real_
-
-plot_data <- data.frame(
-  cell = cells,
-  UMAP_1 = umap_coordinates[, 1],
-  UMAP_2 = umap_coordinates[, 2],
-  Median_total = median_total[cells],
-  Median_ML = median_ML[cells],
-  Median_MH = median_MH[cells]
-)
-
-cluster_plot <- DimPlot(
-  total_object_subset,
-  reduction = "umap_total",
-  group.by = "clusters_total",
-  label = TRUE,
-  repel = TRUE,
-  pt.size = 1
-) +
-  ggtitle("Total-proteome clusters") +
-  theme_classic() +
-  theme(plot.title = element_text(face = "bold", hjust = 0.5))
-
-# Convert the three median columns to long format so one ggplot call creates all panels.
-median_plot_data <- plot_data %>%
-  pivot_longer(
-    cols = c(Median_total, Median_ML, Median_MH),
-    names_to = "measurement",
-    values_to = "value"
-  ) %>%
-  mutate(
-    measurement = factor(
-      measurement,
-      levels = c("Median_total", "Median_ML", "Median_MH"),
-      labels = c("Median total", "Median M/L", "Median M/H")
-    )
-  )
-
-median_plots <- lapply(levels(median_plot_data$measurement), function(measurement_name) {
-  current_data <- filter(median_plot_data, measurement == measurement_name)
-
-  ggplot(current_data, aes(UMAP_1, UMAP_2)) +
-    geom_point(color = "grey80", size = 0.9) +
-    geom_point(
-      data = filter(current_data, !is.na(value)),
-      aes(color = value),
-      size = 0.9
-    ) +
-    scale_color_viridis_c(option = "inferno", na.value = "grey80") +
-    coord_equal() +
-    theme_classic() +
-    labs(title = measurement_name, color = "Median value", x = "UMAP 1", y = "UMAP 2") +
-    theme(plot.title = element_text(face = "bold", hjust = 0.5))
-})
-
-combined_plot <- (cluster_plot | median_plots[[1]] | median_plots[[2]] | median_plots[[3]]) +
-  plot_layout(ncol = 2, nrow = 2) +
-  plot_annotation(
-    title = "Median total, M/L and M/H on total-proteome UMAP",
-    theme = theme(plot.title = element_text(face = "bold", hjust = 0.5))
-  )
-
-ggsave(
-  file.path(path, "Figures/Fig5c_Median_total_ML_MH_on_total_UMAP.pdf"),
-  combined_plot,
-  width = 14,
-  height = 12,
-  limitsize = FALSE
-)
-
 saveRDS(assay_object, file.path(path, paste0("Objects/assay_object_",assay_name,".rds")))
+# assay_object <- readRDS(file.path(path, paste0("Objects/assay_object_",assay_name,".rds")))
 
 
-
-# ---- Figures 5d ----
+# ---- Figures 5c and d ----
 # Plotting selected markers M/L, M/H and total intensities on total-proteome UMAP
 # Differential abundance: each cluster versus all remaining cells.
+# assay_name = "total" #light, medium, turnover, total
+# cluster_column <- paste0("clusters_", assay_name)
 # clusters <- assay_object[[cluster_column, drop = TRUE]]
 # names(clusters) <- colnames(assay_object)
+# values <- assay_matrices[[assay_name]]$values 
 # markers <- run_proda_markers(values, clusters)
+# write.csv(markers, paste(path, "/Objects/markers_",assay_name,".csv", sep=""))
 
 # # Selected protein values on the assay-specific UMAP.
 total_object <- assay_object
@@ -608,7 +517,7 @@ plot_selected_proteins(
   "clusters_total",
   "umap_total",
   "M/L on total-proteome clusters",
-  file.path(path, "Figures/Fig5d_SelectedMarkers_ML_on_total_clusters.pdf")
+  file.path(path, "Figures/Fig5c-d_SelectedMarkers_ML_on_total_clusters.pdf")
 )
 
 plot_selected_proteins(
@@ -617,7 +526,7 @@ plot_selected_proteins(
   "clusters_total",
   "umap_total",
   "M/H on total-proteome clusters",
-  file.path(path, "Figures/Fig5d_SelectedMarkers_MH_on_total_clusters.pdf")
+  file.path(path, "Figures/Fig5c-d_SelectedMarkers_MH_on_total_clusters.pdf")
 )
 
 plot_selected_proteins(
@@ -626,13 +535,13 @@ plot_selected_proteins(
   "clusters_total",
   "umap_total",
   "total on total-proteome clusters",
-  file.path(path, "Figures/Fig5d_SelectedMarkers_total_on_total_clusters.pdf")
+  file.path(path, "Figures/Fig5c-d_SelectedMarkers_total_on_total_clusters.pdf")
 )
 
 
 
 # ---- Figure 5e ----
-# Display M/L vs M/H values per cell
+# Display M/L vs M/H and M/H vs total values per cell for specific markers
 MH_values_long <- MH_values %>%
   as.data.frame() %>%
   tibble::rownames_to_column(var = "protein") %>%
@@ -696,7 +605,7 @@ for (label in names(plots_data)) {
 
   p <- ggplot(data_plot, aes(x = total, y = .data[[label]])) +
     geom_point(aes(color = clusters_total)) +
-    scale_color_manual(values = c("0" = "#00AEEF","1" = "#007169","2" = "#EB008B")) +
+    scale_color_manual(values = c("0" = "#00AEEF","1" = "#EB008B","2" = "#007169")) +
     #geom_pointdensity(adjust = 0.1) + 
     #scale_color_viridis_c() +
     geom_smooth(method = "lm", color = "black", se = FALSE, size = 1) + # Main Regression Line
