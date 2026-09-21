@@ -21,17 +21,18 @@ The folder Data can be downloaded in the following link: https://nc.molgen.mpg.d
 │   ├── Figures/
 │   ├── Logs/
 │   └── Objects/
-├── 01_Fig1b_FreeAA.R
-├── 02a_PreprocessingSILAC&controlSamples.R
-├── 02b_Fig1_QCproteomics.R
-├── 02c_Subset_Proteins_Kinetics.R
-├── 03a_IntegrationMultiomics.R
-├── 03b_Fig2_RiboseqProteomics.R
-├── 03c_Fig3_MultiomicsAnalysis.R
-├── 03d_Fig3_CellTypeBias.R
-├── 04a_Fig4_SpatialProteomics_neocortex.R
-├── 04b_Fig4a_SpatialProteomics_hemisphere.R
-└── 05_Fig5_scSILAC.R
+├── Scripts/
+│   ├── 01_Fig1b_FreeAA.R
+│   ├── 02a_PreprocessingSILAC&controlSamples.R
+│   ├── 02b_Fig1_QCproteomics.R
+│   ├── 02c_Subset_Proteins_Kinetics.R
+│   ├── 03a_IntegrationMultiomics.R
+│   ├── 03b_Fig2_RiboseqProteomics.R
+│   ├── 03c_Fig3_MultiomicsAnalysis.R
+│   ├── 03d_Fig3_CellTypeBias.R
+│   ├── 04a_Fig4_SpatialProteomics_neocortex.R
+│   ├── 04b_Fig4a_SpatialProteomics_hemisphere.R
+│   └── 05_Fig5_scSILAC.R
 ```
 
 Preserve the original filenames and table structures shown below, or update the corresponding **User settings** section in each script.
